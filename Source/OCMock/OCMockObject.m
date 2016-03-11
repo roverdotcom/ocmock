@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2004-2016 Erik Doernenburg and contributors
+ *  Copyright (c) 2004-2015 Erik Doernenburg and contributors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may
  *  not use these files except in compliance with the License. You may obtain
@@ -24,12 +24,16 @@
 #import "NSInvocation+OCMAdditions.h"
 #import "OCMInvocationMatcher.h"
 #import "OCMMacroState.h"
-#import "OCMFunctionsPrivate.h"
+#import "OCMFunctions.h"
 #import "OCMVerifier.h"
 #import "OCMInvocationExpectation.h"
-#import "OCMExceptionReturnValueProvider.h"
 #import "OCMExpectationRecorder.h"
 
+@interface OCMockObject()
+
+@property (nonatomic, copy) NSString *internal_class_name;
+
+@end
 
 @implementation OCMockObject
 
@@ -46,17 +50,26 @@
 
 + (id)mockForClass:(Class)aClass
 {
-	return [[[OCClassMockObject alloc] initWithClass:aClass] autorelease];
+    NSString *name = NSStringFromClass(aClass);
+	OCMockObject *mock = [[[OCClassMockObject alloc] initWithClass:aClass] autorelease];
+    [OCMockObject addMockForName:name object:mock];
+    return mock;
 }
 
 + (id)mockForProtocol:(Protocol *)aProtocol
 {
-	return [[[OCProtocolMockObject alloc] initWithProtocol:aProtocol] autorelease];
+    NSString *name = NSStringFromProtocol(aProtocol);
+    OCMockObject *mock = [[[OCProtocolMockObject alloc] initWithProtocol:aProtocol] autorelease];
+    [OCMockObject addMockForName:name object:mock];
+    return mock;
 }
 
 + (id)partialMockForObject:(NSObject *)anObject
 {
-	return [[[OCPartialMockObject alloc] initWithObject:anObject] autorelease];
+    NSString *name = NSStringFromClass([anObject class]);
+    OCMockObject *mock = [[[OCPartialMockObject alloc] initWithObject:anObject] autorelease];
+    [OCMockObject addMockForName:name object:mock];
+    return mock;
 }
 
 
@@ -123,6 +136,36 @@
 
 
 #pragma mark  Public API
++ (NSMutableArray *)mockedNames {
+    static NSMutableArray *mockedNames;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        mockedNames = [NSMutableArray new];
+    });
+    return mockedNames;
+}
+
++ (NSInteger)mockedInstanceCount {
+    return [OCMockObject mockedNames].count;
+}
+
++ (NSObject *)synch {
+    static NSObject *object;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        object = [NSObject new];
+    });
+    return object;
+}
+
++ (void)addMockForName:(NSString *)name object:(OCMockObject *)object {
+    @synchronized([OCMockObject synch]) {
+        NSLog(@"adding mock: %@", name);
+        NSMutableArray *mocked = [OCMockObject mockedNames];
+        [mocked addObject:name];
+        object.internal_class_name = name;
+    }
+}
 
 - (void)setExpectationOrderMatters:(BOOL)flag
 {
@@ -131,7 +174,36 @@
 
 - (void)stopMocking
 {
+    if (!self.internal_class_name.length) return;
+    NSLog(@"stopping: %@", self.internal_class_name);
+    [OCMockObject removeObjectForString:self.internal_class_name];
+    self.internal_class_name = @"";
     // no-op for mock objects that are not class object or partial mocks
+}
+
++ (void)resetCounters {
+    @synchronized([OCMockObject synch]) {
+        NSMutableArray *mocked = [OCMockObject mockedNames];
+        [mocked removeAllObjects];
+    }
+}
+
++ (void)removeObjectForString:(NSString *)name {
+    @synchronized([OCMockObject synch]) {
+        NSMutableArray *mocked = [OCMockObject mockedNames];
+        
+        NSInteger ix = [self findIndexForString:name inArray:mocked];
+        if (ix >= 0) {
+            [mocked removeObjectAtIndex:ix];
+        }
+    }
+}
+
++ (NSInteger)findIndexForString:(NSString *)name inArray:(NSArray *)mocks {
+    for (NSInteger ix = 0; ix < mocks.count; ix++) {
+        if ([[OCMockObject mockedNames][ix] isEqualToString:name]) return ix;
+    }
+    return -1;
 }
 
 
@@ -201,7 +273,7 @@
     {
         if([expectations count] == 0)
             break;
-        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:MIN(step, delay)]];
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:step]];
         delay -= step;
         step *= 2;
     }
@@ -262,15 +334,7 @@
     }
     @catch(NSException *e)
     {
-        if([[e name] isEqualToString:OCMStubbedException])
-        {
-            e = [[e userInfo] objectForKey:@"exception"];
-        }
-        else
-        {
-            // add non-stubbed method to list of exceptions to be re-raised in verify
-            [exceptions addObject:e];
-        }
+        [exceptions addObject:e];
         [e raise];
     }
 }
@@ -293,7 +357,7 @@
 
      if([expectations containsObject:stub])
      {
-          OCMInvocationExpectation *expectation = [self _nextExpectedInvocation];
+          OCMInvocationExpectation *expectation = [self _nextExptectedInvocation];
           if(expectationOrderMatters && (expectation != stub))
           {
                [NSException raise:NSInternalInconsistencyException format:@"%@: unexpected method invoked: %@\n\texpected:\t%@",
@@ -314,7 +378,7 @@
 }
 
 
-- (OCMInvocationExpectation *)_nextExpectedInvocation
+- (OCMInvocationExpectation *)_nextExptectedInvocation
 {
     for(OCMInvocationExpectation *expectation in expectations)
         if(![expectation isMatchAndReject])
