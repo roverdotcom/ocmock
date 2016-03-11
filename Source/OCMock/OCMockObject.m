@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2004-2016 Erik Doernenburg and contributors
+ *  Copyright (c) 2004-2015 Erik Doernenburg and contributors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may
  *  not use these files except in compliance with the License. You may obtain
@@ -24,10 +24,9 @@
 #import "NSInvocation+OCMAdditions.h"
 #import "OCMInvocationMatcher.h"
 #import "OCMMacroState.h"
-#import "OCMFunctionsPrivate.h"
+#import "OCMFunctions.h"
 #import "OCMVerifier.h"
 #import "OCMInvocationExpectation.h"
-#import "OCMExceptionReturnValueProvider.h"
 #import "OCMExpectationRecorder.h"
 
 @interface OCMockObject()
@@ -52,7 +51,7 @@
 + (id)mockForClass:(Class)aClass
 {
     NSString *name = NSStringFromClass(aClass);
-	OCMockObject *mock = [[[OCClassMockObject alloc] initWithClass:aClass] autorelease];
+    OCMockObject *mock = [[[OCClassMockObject alloc] initWithClass:aClass] autorelease];
     [OCMockObject addMockForName:name object:mock];
     return mock;
 }
@@ -76,7 +75,7 @@
 
 + (id)niceMockForClass:(Class)aClass
 {
-	return [self _makeNice:[self mockForClass:aClass]];
+    return [self _makeNice:[self mockForClass:aClass]];
 }
 
 + (id)niceMockForProtocol:(Protocol *)aProtocol
@@ -167,12 +166,6 @@
         object.internal_class_name = name;
     }
 }
-
-- (void)setExpectationOrderMatters:(BOOL)flag
-{
-    expectationOrderMatters = flag;
-}
-
 - (void)stopMocking
 {
     if (!self.internal_class_name.length) return;
@@ -205,6 +198,11 @@
         if ([[OCMockObject mockedNames][ix] isEqualToString:name]) return ix;
     }
     return -1;
+}
+
+- (void)setExpectationOrderMatters:(BOOL)flag
+{
+    expectationOrderMatters = flag;
 }
 
 
@@ -274,7 +272,7 @@
     {
         if([expectations count] == 0)
             break;
-        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:MIN(step, delay)]];
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:step]];
         delay -= step;
         step *= 2;
     }
@@ -335,15 +333,7 @@
     }
     @catch(NSException *e)
     {
-        if([[e name] isEqualToString:OCMStubbedException])
-        {
-            e = [[e userInfo] objectForKey:@"exception"];
-        }
-        else
-        {
-            // add non-stubbed method to list of exceptions to be re-raised in verify
-            [exceptions addObject:e];
-        }
+        [exceptions addObject:e];
         [e raise];
     }
 }
@@ -366,7 +356,7 @@
 
      if([expectations containsObject:stub])
      {
-          OCMInvocationExpectation *expectation = [self _nextExpectedInvocation];
+          OCMInvocationExpectation *expectation = [self _nextExptectedInvocation];
           if(expectationOrderMatters && (expectation != stub))
           {
                [NSException raise:NSInternalInconsistencyException format:@"%@: unexpected method invoked: %@\n\texpected:\t%@",
@@ -387,7 +377,7 @@
 }
 
 
-- (OCMInvocationExpectation *)_nextExpectedInvocation
+- (OCMInvocationExpectation *)_nextExptectedInvocation
 {
     for(OCMInvocationExpectation *expectation in expectations)
         if(![expectation isMatchAndReject])
