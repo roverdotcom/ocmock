@@ -28,6 +28,7 @@
 #import "OCMVerifier.h"
 #import "OCMInvocationExpectation.h"
 #import "OCMExpectationRecorder.h"
+#import "OCMFunctionsPrivate.h"
 
 @interface OCMockObject()
 
