@@ -161,7 +161,6 @@
 
 + (void)addMockForName:(NSString *)name object:(OCMockObject *)object {
     @synchronized([OCMockObject synch]) {
-        NSLog(@"adding mock: %@", name);
         NSMutableArray *mocked = [OCMockObject mockedNames];
         [mocked addObject:name];
         object.internal_class_name = name;
@@ -170,7 +169,6 @@
 - (void)stopMocking
 {
     if (!self.internal_class_name.length) return;
-    NSLog(@"stopping: %@", self.internal_class_name);
     [OCMockObject removeObjectForString:self.internal_class_name];
     self.internal_class_name = @"";
     // no-op for mock objects that are not class object or partial mocks
